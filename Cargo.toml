@@ -6,7 +6,8 @@ description = "A fast, ergonomic grep-like tool in Rust"
 license = "MIT OR Apache-2.0"  
 keywords = ["grep", "search", "regex", "cli", "highlight", "recursive"]
 categories = ["command-line-utilities", "text-processing"]
-repository = ""
+repository = "https://github.com/drxnn/lightgrep"
+homepage = "https://github.com/drxnn/lightgrep"
 
 [dependencies]
 clap = { version = "4.5.45", features = ["derive"] }

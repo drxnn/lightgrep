@@ -65,10 +65,10 @@ fn run(config: Config) -> Result<(), Box<dyn Error>> {
                 thread_pool.execute(move || {
                     let _ = process_batch(batch, tx, config, false);
                 });
-                batch = Vec::with_capacity(BATCH_SIZE); // reset batch
+                batch = Vec::with_capacity(BATCH_SIZE);
             }
         }
-        // if less than 25 files, send the remaining
+
         if !batch.is_empty() {
             let tx = tx.clone();
             let config = Arc::clone(&config);
@@ -107,8 +107,6 @@ fn run(config: Config) -> Result<(), Box<dyn Error>> {
         drop(tx);
         drop(thread_pool);
         print_results(rx, config);
-
-        // println!("The number of processed files was: {}", &file_counter_clone);
     }
 
     Ok(())

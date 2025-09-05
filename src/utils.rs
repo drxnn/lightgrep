@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use colored::Colorize;
 
 extern crate num_cpus;
@@ -73,7 +74,6 @@ pub fn process_batch(
         }
 
         for (start, end) in chunks {
-            // we are moving the cursor of the file whereever our start is
             let mut f = File::open(&config.file_path)?;
             f.seek(SeekFrom::Start(start))?;
             let config = Arc::clone(&config);
@@ -84,7 +84,7 @@ pub fn process_batch(
 
             thread_pool.execute(move || {
                 let file_contents = String::from_utf8_lossy(&buffer);
-                // let temp = search(&config, &file_contents);
+
                 let temp = process_lines(
                     &config.pattern,
                     &file_contents,
