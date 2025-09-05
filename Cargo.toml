@@ -1,0 +1,20 @@
+[package]
+name = "drep"
+version = "0.1.0"
+edition = "2024"
+description = "A fast, ergonomic grep-like tool in Rust"
+license = "MIT OR Apache-2.0"  
+keywords = ["grep", "search", "regex", "cli", "highlight", "recursive"]
+categories = ["command-line-utilities", "text-processing"]
+repository = ""
+
+[dependencies]
+clap = { version = "4.5.45", features = ["derive"] }
+colored = "3.0.0"
+regex = "1.11.1"
+num_cpus = "1.0"
+
+crossbeam = "0.8"
+aho-corasick = "1.1.3"
+
+walkdir = "2.5.0"
