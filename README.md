@@ -54,15 +54,16 @@ lightgrep TODO -F src/test.txt
 lightgrep '\bfixme\b' README.md
 
 # Search all files that have a rs extension for "unsafe"
-cargo run --  -r --ext rs --query unsafe
+lightgrep  -r --ext rs --query unsafe
 
 # Recursively search and highlight 3 and 5 letter words
-❯ cargo run --  -E --query  "\b[a-zA-Z]{3}\b|\b[a-zA-Z]{5}\b" -r   --highlight
+❯ lightgrep  -E --query  "\b[a-zA-Z]{3}\b|\b[a-zA-Z]{5}\b" -r   --highlight
 
 
 # Multiple String Literal Patterns found and highlighted
 
-lightgrep -- --multiple red blue green  --highlight --recursive
+lightgrep  --multiple red blue green  --highlight --recursive
+
 
 ```
 
@@ -85,15 +86,20 @@ lightgrep -- --multiple red blue green  --highlight --recursive
 
 ## Notes
 
+```bash
+
 --multiple and --regex cannot be used together.
 
 If you use --multiple, you don’t need --query.
 
 File extensions for --ext can be provided with or without the dot (e.g. rs or .rs).
 
+If you provide an extension, you have to use the recursive flag.
+
 When using regex queries (--regex), remember to escape shell metacharacters (e.g. '\bword\b').
 
 Highlighting (--highlight) works with both string and regex searches.
+```
 
 ### License
 
