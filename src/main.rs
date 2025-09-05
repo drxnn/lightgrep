@@ -5,7 +5,7 @@ extern crate num_cpus;
 mod types;
 mod utils;
 
-use drep::{
+use lightgrep::{
     Args, Config, FileResult, ThreadPool, count_matches, print_results, process_batch,
     process_lines,
 };

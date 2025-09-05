@@ -1,5 +1,5 @@
 [package]
-name = "drep"
+name = "lightgrep"
 version = "0.1.0"
 edition = "2024"
 description = "A fast, ergonomic grep-like tool in Rust"
