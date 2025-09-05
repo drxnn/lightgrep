@@ -14,7 +14,7 @@ lightgrep is a fast, ergonomic grep-like CLI tool written in Rust. It searches f
 
 - Recursive directory search
 
-- Multiple patterns (string literals only)
+- Match multiple literal strings at once using --multiple (e.g., --multiple read text book). For regex, combine patterns into a single expression.
 
 - Filter by file extension (e.g. .rs, .md)
 
@@ -63,6 +63,9 @@ lightgrep  -r --ext rs --query unsafe
 # Multiple String Literal Patterns found and highlighted
 
 lightgrep  --multiple red blue green  --highlight --recursive
+
+# search for "hello" in all .rs files recursively and save results(all lines have at least one match) to output.txt
+❯ lightgrep -q hello -r --ext rs >> output.txt
 
 
 ```
