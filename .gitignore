@@ -1,0 +1,11 @@
+
+/target/
+
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+README.md
+
+*.txt
