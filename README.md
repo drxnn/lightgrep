@@ -41,7 +41,7 @@ cargo build --release
 ## Usage
 
 ```
-lightgrep [OPTIONS] <PATTERN> -F [FILE...]
+lightgrep [OPTIONS] -q <PATTERN> -F [FILE...]
 ```
 
 Basic examples:
