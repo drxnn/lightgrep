@@ -26,14 +26,11 @@ fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
     let config: Config = args.into();
-    let start = Instant::now();
 
     if let Err(e) = run(config) {
         eprintln!("Application error: {e}");
         process::exit(1);
     }
-    let duration = start.elapsed();
-    println!("Finished in {:?}", duration);
 
     Ok(())
 }
