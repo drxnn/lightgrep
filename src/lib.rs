@@ -1,17 +1,19 @@
-#![allow(dead_code)]
 mod types;
 mod utils;
 
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    env,
+    error::Error,
+    sync::{Arc, atomic::AtomicUsize, mpsc},
+};
 
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use colored::Colorize;
 pub use types::{Args, Config, FileResult, Pattern, ThreadPool};
 pub use utils::{print_each_result, print_results, process_batch};
+use walkdir::{DirEntry, WalkDir};
 
-pub fn count_matches(matches: &Vec<(usize, String)>) -> usize {
-    // wrong for recursive, fix
-
+pub fn count_matches(matches: &[(usize, String)]) -> usize {
     return matches.len();
 }
 
@@ -56,16 +58,13 @@ pub fn highlight_match(line: &str, pat: &Pattern) -> String {
             let matches: Vec<(usize, usize)> =
                 re.find_iter(line).map(|x| (x.start(), x.end())).collect();
 
-            for (index, char) in line.char_indices() {
-                let inside_match = matches.iter().any(|(s, e)| index >= *s && index < *e);
-
-                if inside_match {
-                    highlighted_string
-                        .push_str(&char.to_string().red().underline().bold().to_string());
-                } else {
-                    highlighted_string.push(char);
-                }
+            let mut last = 0;
+            for (start, end) in matches {
+                highlighted_string.push_str(&line[last..start]);
+                highlighted_string.push_str(&line[start..end].red().underline().bold().to_string());
+                last = end;
             }
+            highlighted_string.push_str(&line[last..]);
 
             highlighted_string
         }
@@ -96,11 +95,79 @@ pub fn process_lines<'a>(
         .collect()
 }
 
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    let file_counter = Arc::new(AtomicUsize::new(0));
+    let current = env::current_dir()?;
+    const BATCH_SIZE: usize = 3; // compute dynamically instead of this
+    let num_of_cpus = num_cpus::get();
+    let pool_size = if num_of_cpus > 1 { num_of_cpus - 1 } else { 1 };
+    let mut batch = Vec::with_capacity(BATCH_SIZE);
+    let (tx, rx) = mpsc::channel::<FileResult>();
+
+    let config = Arc::new(config);
+    let file_counter_clone = Arc::clone(&file_counter);
+    let thread_pool = ThreadPool::new(pool_size, file_counter_clone);
+
+    if config.recursive {
+        let mut entry: DirEntry;
+
+        for entry_walkdir in WalkDir::new(current) {
+            entry = entry_walkdir?;
+
+            batch.push(entry);
+
+            if batch.len() == BATCH_SIZE {
+                let config = Arc::clone(&config);
+                let tx = tx.clone();
+                thread_pool.execute(move || {
+                    let _ = process_batch(batch, tx, config, false);
+                });
+                batch = Vec::with_capacity(BATCH_SIZE);
+            }
+        }
+
+        if !batch.is_empty() {
+            let tx = tx.clone();
+            let config = Arc::clone(&config);
+            thread_pool.execute(move || {
+                let _ = process_batch(batch, tx, config, false);
+            });
+        }
+        drop(tx);
+        drop(thread_pool);
+
+        print_results(rx, config);
+    } else {
+        let entry = match WalkDir::new(&config.file_path)
+            .max_depth(1)
+            .into_iter()
+            .next()
+        {
+            Some(Ok(e)) => e,
+            Some(Err(e)) => return Err(Box::new(e)),
+            None => return Err("Entry was not found in current directory".into()),
+        };
+
+        batch.push(entry);
+
+        {
+            let tx = tx.clone();
+            let config = Arc::clone(&config);
+            let _ = process_batch(batch, tx, config, true);
+        } // dropping config to use later
+        drop(tx);
+        drop(thread_pool);
+        print_results(rx, config);
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use regex::Regex;
+    use aho_corasick::AhoCorasick;
 
     #[test]
     fn literal_match() {

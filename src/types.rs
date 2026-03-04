@@ -1,16 +1,18 @@
 #![allow(dead_code)]
-use std::collections::HashMap;
-use std::path::Path;
-
 use clap::Parser;
 use crossbeam::channel::{Receiver, Sender, unbounded};
 use regex::{Regex, RegexBuilder};
+use std::collections::HashMap;
 use std::env;
+use std::error::Error;
+use std::path::Path;
 use std::process;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use std::sync::{Arc, Mutex};
 use std::thread;
+#[derive(Clone)] // for testing
 pub enum Pattern {
     Literal {
         pattern: AhoCorasick,
@@ -24,6 +26,7 @@ pub enum Pattern {
     },
 }
 
+#[derive(Clone)] // for test
 pub struct Config {
     pub file_path: String,
     pub pattern: Pattern,
@@ -68,8 +71,9 @@ pub struct Args {
     #[arg(long = "highlight")]
     pub highlight: bool,
 }
-impl From<Args> for Config {
-    fn from(args: Args) -> Self {
+impl TryFrom<Args> for Config {
+    type Error = Box<dyn Error>;
+    fn try_from(args: Args) -> Result<Self, Self::Error> {
         let ignore_case = args.ignore_case || env::var("IGNORE_CASE").is_ok();
 
         let file_path = match args.file_path {
@@ -84,15 +88,14 @@ impl From<Args> for Config {
         });
 
         // helper function put in utils later
-        fn build_ac(patterns: &[String], ignore_case: bool) -> AhoCorasick {
+        fn build_ac(patterns: &[String], ignore_case: bool) -> Result<AhoCorasick, Box<dyn Error>> {
             let pattern_refs: Vec<&str> = patterns.iter().map(|s| s.as_str()).collect();
             if ignore_case {
-                AhoCorasickBuilder::new()
+                Ok(AhoCorasickBuilder::new()
                     .ascii_case_insensitive(true)
-                    .build(&pattern_refs)
-                    .unwrap()
+                    .build(&pattern_refs)?)
             } else {
-                AhoCorasick::new(&pattern_refs).unwrap()
+                Ok(AhoCorasick::new(&pattern_refs)?)
             }
         }
 
@@ -114,25 +117,22 @@ impl From<Args> for Config {
                 }
             }
         } else if !args.multiple.is_empty() {
-            let ac = build_ac(&args.multiple, ignore_case);
+            let ac = build_ac(&args.multiple, ignore_case)?;
             Pattern::MultipleLiteral {
                 pattern: ac,
                 case_insensitive: ignore_case,
             }
         } else if let Some(q) = args.query {
-            let ac = build_ac(&vec![q], ignore_case);
+            let ac = build_ac(&vec![q], ignore_case)?;
             Pattern::Literal {
                 pattern: ac,
                 case_insensitive: ignore_case,
             }
         } else {
-            eprintln!(
-                "Error: no query provided. Provide positional argument(1) for query <Q> or --multiple <Q>."
-            );
-            process::exit(1);
+            return Err("--regex requires a query string (use --query or --multiple)".into());
         };
 
-        Config {
+        Ok(Config {
             pattern,
             file_path,
             ignore_case,
@@ -142,28 +142,28 @@ impl From<Args> for Config {
             recursive: args.recursive,
             file_extension,
             highlight: args.highlight,
-        }
+        })
     }
 }
 pub struct ThreadPool {
-    pub workers: Vec<Worker>,
-    pub sender: Option<Sender<Job>>,
+    workers: Vec<Worker>,
+    sender: Option<Sender<Job>>,
 }
 
 pub struct Worker {
-    pub id: usize,
-    pub thread: Option<thread::JoinHandle<()>>,
+    id: usize,
+    thread: Option<thread::JoinHandle<()>>,
 }
 
 impl Worker {
-    pub fn new(id: usize, receiver: Receiver<Job>, counter: Arc<Mutex<usize>>) -> Self {
+    pub fn new(id: usize, receiver: Receiver<Job>, counter: Arc<AtomicUsize>) -> Self {
         let thread = thread::spawn(move || {
             loop {
                 match receiver.recv() {
                     Ok(job) => {
                         job();
-                        let mut count = counter.lock().unwrap();
-                        *count += 1;
+
+                        counter.fetch_add(1, Ordering::Relaxed);
                     }
                     Err(_) => break,
                 }
@@ -177,7 +177,7 @@ impl Worker {
     }
 }
 impl ThreadPool {
-    pub fn new(size: usize, counter: Arc<Mutex<usize>>) -> Self {
+    pub fn new(size: usize, counter: Arc<AtomicUsize>) -> Self {
         let mut workers = Vec::with_capacity(size);
 
         let (sender, receiver) = unbounded::<Job>();
@@ -185,7 +185,7 @@ impl ThreadPool {
         for id in 0..size {
             let counter_clone = Arc::clone(&counter);
             let rec_clone = receiver.clone();
-            workers.push(Worker::new(id as usize, rec_clone, counter_clone));
+            workers.push(Worker::new(id, rec_clone, counter_clone));
         }
 
         ThreadPool {
@@ -199,13 +199,15 @@ impl Drop for ThreadPool {
         self.sender.take();
         for worker in &mut self.workers {
             if let Some(t) = worker.thread.take() {
-                t.join().unwrap();
+                if let Err(e) = t.join() {
+                    eprintln!("Worker {} panicked: {:?}", worker.id, e);
+                }
             }
         }
     }
 }
 
-pub type Job = Box<dyn FnOnce() + Send + 'static>;
+type Job = Box<dyn FnOnce() + Send + 'static>;
 
 impl ThreadPool {
     pub fn execute<F>(&self, f: F)
