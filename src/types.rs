@@ -1,16 +1,17 @@
 #![allow(dead_code)]
 use clap::Parser;
 use crossbeam::channel::{Receiver, Sender, unbounded};
-use regex::{Regex, RegexBuilder};
+use regex::bytes::Regex;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
+use std::panic;
 use std::path::Path;
 use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 #[derive(Clone)] // for testing
 pub enum Pattern {
@@ -109,7 +110,10 @@ impl TryFrom<Args> for Config {
                 })
             };
 
-            match RegexBuilder::new(&q).case_insensitive(ignore_case).build() {
+            match regex::bytes::RegexBuilder::new(&q)
+                .case_insensitive(ignore_case)
+                .build()
+            {
                 Ok(re) => Pattern::Regex(re),
                 Err(e) => {
                     eprintln!("Invalid regex `{}`: {}", q, e);

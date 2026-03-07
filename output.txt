@@ -1,0 +1,96 @@
+Number of matched lines found: 5815724
+Number of matched lines found: 227329
+Number of matched lines found: 227329
+Number of matched lines found: 227329
+Number of matched lines found: 227329
+the file size in bytes is: $50701856 and the chunk_size is 576157
+chunk starts at: 0, and ends: 576163. The line_offset is :0
+chunk starts at: 576163, and ends: 1152347. The line_offset is :5089
+chunk starts at: 1152347, and ends: 1728629. The line_offset is :10176
+chunk starts at: 1728629, and ends: 2304881. The line_offset is :15270
+chunk starts at: 2304881, and ends: 2881165. The line_offset is :20367
+chunk starts at: 2881165, and ends: 3457391. The line_offset is :25457
+chunk starts at: 3457391, and ends: 4033906. The line_offset is :30546
+chunk starts at: 4033906, and ends: 4610159. The line_offset is :35645
+chunk starts at: 4610159, and ends: 5186443. The line_offset is :40743
+chunk starts at: 5186443, and ends: 5762669. The line_offset is :45833
+chunk starts at: 5762669, and ends: 6338986. The line_offset is :50922
+chunk starts at: 6338986, and ends: 6915382. The line_offset is :56013
+chunk starts at: 6915382, and ends: 7491640. The line_offset is :61102
+chunk starts at: 7491640, and ends: 8067859. The line_offset is :66202
+chunk starts at: 8067859, and ends: 8644061. The line_offset is :71298
+chunk starts at: 8644061, and ends: 9220660. The line_offset is :76387
+chunk starts at: 9220660, and ends: 9796918. The line_offset is :81478
+chunk starts at: 9796918, and ends: 10373137. The line_offset is :86578
+chunk starts at: 10373137, and ends: 10949339. The line_offset is :91674
+chunk starts at: 10949339, and ends: 11525938. The line_offset is :96763
+chunk starts at: 11525938, and ends: 12102196. The line_offset is :101854
+chunk starts at: 12102196, and ends: 12678414. The line_offset is :106954
+chunk starts at: 12678414, and ends: 13254617. The line_offset is :112049
+chunk starts at: 13254617, and ends: 13831216. The line_offset is :117139
+chunk starts at: 13831216, and ends: 14407474. The line_offset is :122230
+chunk starts at: 14407474, and ends: 14983692. The line_offset is :127330
+chunk starts at: 14983692, and ends: 15559895. The line_offset is :132425
+chunk starts at: 15559895, and ends: 16136494. The line_offset is :137515
+chunk starts at: 16136494, and ends: 16712752. The line_offset is :142606
+chunk starts at: 16712752, and ends: 17288970. The line_offset is :147706
+chunk starts at: 17288970, and ends: 17865173. The line_offset is :152801
+chunk starts at: 17865173, and ends: 18441772. The line_offset is :157891
+chunk starts at: 18441772, and ends: 19018029. The line_offset is :162982
+chunk starts at: 19018029, and ends: 19594248. The line_offset is :168081
+chunk starts at: 19594248, and ends: 20170451. The line_offset is :173177
+chunk starts at: 20170451, and ends: 20747050. The line_offset is :178267
+chunk starts at: 20747050, and ends: 21323307. The line_offset is :183358
+chunk starts at: 21323307, and ends: 21899526. The line_offset is :188457
+chunk starts at: 21899526, and ends: 22475729. The line_offset is :193553
+chunk starts at: 22475729, and ends: 23052328. The line_offset is :198643
+chunk starts at: 23052328, and ends: 23628585. The line_offset is :203734
+chunk starts at: 23628585, and ends: 24204804. The line_offset is :208833
+chunk starts at: 24204804, and ends: 24781007. The line_offset is :213929
+chunk starts at: 24781007, and ends: 25357605. The line_offset is :219019
+chunk starts at: 25357605, and ends: 25933863. The line_offset is :224109
+chunk starts at: 25933863, and ends: 26510082. The line_offset is :229209
+chunk starts at: 26510082, and ends: 27086285. The line_offset is :234305
+chunk starts at: 27086285, and ends: 27662883. The line_offset is :239395
+chunk starts at: 27662883, and ends: 28239141. The line_offset is :244485
+chunk starts at: 28239141, and ends: 28815360. The line_offset is :249585
+chunk starts at: 28815360, and ends: 29391563. The line_offset is :254681
+chunk starts at: 29391563, and ends: 29968161. The line_offset is :259771
+chunk starts at: 29968161, and ends: 30544419. The line_offset is :264861
+chunk starts at: 30544419, and ends: 31120638. The line_offset is :269961
+chunk starts at: 31120638, and ends: 31696840. The line_offset is :275057
+chunk starts at: 31696840, and ends: 32273439. The line_offset is :280146
+chunk starts at: 32273439, and ends: 32849697. The line_offset is :285237
+chunk starts at: 32849697, and ends: 33425916. The line_offset is :290337
+chunk starts at: 33425916, and ends: 34002118. The line_offset is :295433
+chunk starts at: 34002118, and ends: 34578717. The line_offset is :300522
+chunk starts at: 34578717, and ends: 35154975. The line_offset is :305613
+chunk starts at: 35154975, and ends: 35731194. The line_offset is :310713
+chunk starts at: 35731194, and ends: 36307396. The line_offset is :315809
+chunk starts at: 36307396, and ends: 36883995. The line_offset is :320898
+chunk starts at: 36883995, and ends: 37460253. The line_offset is :325989
+chunk starts at: 37460253, and ends: 38036472. The line_offset is :331089
+chunk starts at: 38036472, and ends: 38612674. The line_offset is :336185
+chunk starts at: 38612674, and ends: 39189273. The line_offset is :341274
+chunk starts at: 39189273, and ends: 39765531. The line_offset is :346365
+chunk starts at: 39765531, and ends: 40341749. The line_offset is :351465
+chunk starts at: 40341749, and ends: 40917952. The line_offset is :356560
+chunk starts at: 40917952, and ends: 41494551. The line_offset is :361650
+chunk starts at: 41494551, and ends: 42070809. The line_offset is :366741
+chunk starts at: 42070809, and ends: 42647027. The line_offset is :371841
+chunk starts at: 42647027, and ends: 43223230. The line_offset is :376936
+chunk starts at: 43223230, and ends: 43799829. The line_offset is :382026
+chunk starts at: 43799829, and ends: 44376087. The line_offset is :387117
+chunk starts at: 44376087, and ends: 44952305. The line_offset is :392217
+chunk starts at: 44952305, and ends: 45528508. The line_offset is :397312
+chunk starts at: 45528508, and ends: 46105107. The line_offset is :402402
+chunk starts at: 46105107, and ends: 46681364. The line_offset is :407493
+chunk starts at: 46681364, and ends: 47257583. The line_offset is :412592
+chunk starts at: 47257583, and ends: 47833786. The line_offset is :417688
+chunk starts at: 47833786, and ends: 48410385. The line_offset is :422778
+chunk starts at: 48410385, and ends: 48986642. The line_offset is :427869
+chunk starts at: 48986642, and ends: 49562861. The line_offset is :432968
+chunk starts at: 49562861, and ends: 50139064. The line_offset is :438064
+chunk starts at: 50139064, and ends: 50701856. The line_offset is :443154
+Number of matched lines found: 227329
+Number of matched lines found: 227329

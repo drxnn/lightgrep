@@ -1,6 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use lightgrep::{Config, Pattern, run};
-use regex::Regex;
+use regex::bytes::Regex;
 
 fn make_config(file_path: &str) -> Config {
     let regex = Regex::new(r"(said|told|asked)").unwrap();

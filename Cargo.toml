@@ -19,6 +19,7 @@ crossbeam = "0.8"
 aho-corasick = "1.1.3"
 
 walkdir = "2.5.0"
+memmap2 = "0.9.10"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
@@ -41,4 +42,7 @@ harness = false
 
 [[bench]]
 name = "large_quantity_of_files_bench"
+harness = false
+[[bench]]
+name = "large_file_literal_bench"
 harness = false

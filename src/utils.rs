@@ -1,17 +1,18 @@
 #![allow(dead_code)]
 use colored::Colorize;
+use memmap2::Mmap;
 
 extern crate num_cpus;
 
 use crate::{Config, FileResult, process_lines};
 use crate::{ThreadPool, count_matches};
+// use memmap2::Mmap;
 use std::fs::{self, File};
 
-use std::io::Read;
 use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
 
 use std::sync::mpsc;
+const LARGE_FILE_THRESHOLD: u64 = 1073741824;
 
 use walkdir::DirEntry;
 
@@ -23,10 +24,11 @@ pub fn print_results(rx: mpsc::Receiver<FileResult>, config: Arc<Config>) {
                 let config = Arc::clone(&config);
                 if config.count {
                     total += count_matches(&v);
-                }
-                for (key, value) in &v {
-                    let config = Arc::clone(&config);
-                    print_each_result(config, &n, (*key, value));
+                } else {
+                    for (key, value) in &v {
+                        let config = Arc::clone(&config);
+                        print_each_result(config, &n, (*key, value));
+                    }
                 }
             }
             FileResult::Error(e) => eprintln!("Error: {}", e),
@@ -41,50 +43,39 @@ pub fn print_results(rx: mpsc::Receiver<FileResult>, config: Arc<Config>) {
 pub fn normalize_extension(ext: &str) -> &str {
     ext.strip_prefix('.').unwrap_or(ext)
 }
-pub fn process_batch(
-    batch: Vec<DirEntry>,
+
+pub fn process_file(
+    file: DirEntry,
     tx: mpsc::Sender<FileResult>,
     config: Arc<Config>,
-    single_file: bool,
+    thread_pool: Arc<ThreadPool>,
+    pool_size: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if single_file {
-        let entry = batch
-            .first()
-            .expect("single_file mode requires exactly one entry in batch");
+    let metadata = fs::metadata(file.path())?;
+    let file_size_bytes = metadata.len();
+    let chunk_size = (file_size_bytes + pool_size as u64) / (pool_size * 8) as u64;
 
-        let mut pool_size = num_cpus::get();
-        pool_size = pool_size.saturating_sub(1);
-        if pool_size == 0 {
-            pool_size = 1;
-        }
+    let f = File::open(&file.path())?;
+    let mmap = Arc::new(unsafe { Mmap::map(&f)? });
 
-        let file_counter = Arc::new(AtomicUsize::new(0));
-        let thread_pool = ThreadPool::new(pool_size, file_counter);
-
-        let metadata = fs::metadata(entry.path())?;
-        let file_size_bytes = metadata.len();
-        let chunk_size = (file_size_bytes + pool_size as u64) / pool_size as u64;
-
-        let mut f = File::open(&config.file_path)?;
-        let mut file_buffer = vec![0; f.metadata()?.len() as usize];
-        f.read_exact(&mut file_buffer)?;
-        let chunks = get_chunks(&file_buffer, chunk_size as usize);
+    if metadata.len() >= 32_000_000 {
+        let mmap = Arc::clone(&mmap);
+        let chunks = get_chunks(&mmap, chunk_size as usize);
 
         let mut line_offset = 0;
         for (start, end) in chunks {
             let config = Arc::clone(&config);
             let tx = tx.clone();
+            let mmap = Arc::clone(&mmap);
 
-            let buffer = file_buffer[start..end].to_vec();
+            let chunk_lines = mmap[start..end].iter().filter(|&&b| b == b'\n').count();
 
-            let chunk_lines = buffer.iter().filter(|&&b| b == b'\n').count();
+            let file_path = file.path().to_string_lossy().to_string();
 
             thread_pool.execute(move || {
-                let file_contents = String::from_utf8_lossy(&buffer);
-
                 let temp: Vec<(usize, std::borrow::Cow<'_, str>)> = process_lines(
                     &config.pattern,
-                    &file_contents,
+                    &mmap[start..end],
                     config.invert,
                     config.highlight,
                 )
@@ -98,8 +89,7 @@ pub fn process_batch(
                         .map(|(idx, s)| (idx, s.to_string()))
                         .collect();
 
-                    if let Err(e) = tx.send(FileResult::Match(config.file_path.clone(), owned_temp))
-                    {
+                    if let Err(e) = tx.send(FileResult::Match(file_path, owned_temp)) {
                         eprintln!("failed to send chunk result: {:?}", e);
                     }
                 }
@@ -107,64 +97,26 @@ pub fn process_batch(
             line_offset += chunk_lines;
         }
     } else {
-        for entry in batch {
-            let res = (|| -> FileResult {
-                if !entry.file_type().is_file() {
-                    return FileResult::Skip;
-                }
+        let config = Arc::clone(&config);
+        let tx = tx.clone();
+        let mmap = Arc::clone(&mmap);
+        let file_path = file.path().to_string_lossy().to_string();
 
-                let path = entry.path().to_path_buf();
-                let bytes = match fs::read(&path) {
-                    Ok(b) => b,
-                    _ => {
-                        return FileResult::Skip;
-                    }
-                };
+        thread_pool.execute(move || {
+            let temp: Vec<(usize, std::borrow::Cow<'_, str>)> =
+                process_lines(&config.pattern, &mmap, config.invert, config.highlight);
 
-                let file_contents = match std::str::from_utf8(&bytes) {
-                    Ok(s) => s,
-                    Err(_) => return FileResult::Skip,
-                };
-
-                let file_name = entry.file_name();
-
-                if let Some(config_ext) = &config.file_extension {
-                    let config_ext = normalize_extension(&config_ext);
-                    let curr_ext = entry
-                        .path()
-                        .extension()
-                        .and_then(|ext| ext.to_str())
-                        .map(normalize_extension);
-
-                    if curr_ext != Some(config_ext) {
-                        return FileResult::Skip;
-                    }
-                }
-
-                let temp = process_lines(
-                    &config.pattern,
-                    &file_contents,
-                    config.invert,
-                    config.highlight,
-                );
-
-                if temp.is_empty() {
-                    return FileResult::Skip;
-                }
-
+            if !temp.is_empty() {
                 let owned_temp: Vec<(usize, String)> = temp
                     .into_iter()
                     .map(|(idx, s)| (idx, s.to_string()))
                     .collect();
 
-                let file_name_owned = file_name.to_string_lossy().into_owned();
-
-                FileResult::Match(file_name_owned, owned_temp)
-            })();
-            if let Err(send_err) = tx.send(res) {
-                eprintln!("failed to send result back to main: {:?}", send_err);
+                if let Err(e) = tx.send(FileResult::Match(file_path, owned_temp)) {
+                    eprintln!("failed to send chunk result: {:?}", e);
+                }
             }
-        }
+        });
     }
 
     Ok(())
@@ -189,6 +141,7 @@ fn get_chunks(bytes: &[u8], chunk_size: usize) -> Vec<(usize, usize)> {
 
     while start < bytes_len {
         let mut end = std::cmp::min(start + chunk_size, bytes_len);
+
         while end < bytes_len && bytes[end] != b'\n' {
             end += 1;
         }

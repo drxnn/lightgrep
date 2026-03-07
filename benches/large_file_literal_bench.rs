@@ -3,7 +3,7 @@ use lightgrep::{Config, Pattern, run};
 use regex::bytes::Regex;
 
 fn make_config(file_path: &str) -> Config {
-    let regex = Regex::new(r"\b(?:\w+\s+){5}\w+\b").unwrap();
+    let regex = Regex::new(r"\b[a-zA-Z]{3}\b|\b[a-zA-Z]{5}\b").unwrap();
     Config {
         file_path: file_path.to_string(),
         pattern: Pattern::Regex(regex),
@@ -17,12 +17,12 @@ fn make_config(file_path: &str) -> Config {
     }
 }
 
-fn bench_single_literal(c: &mut Criterion) {
-    let config = make_config("benches/test_data/test_file.txt");
-    c.bench_function("single literal match", |b| {
+fn bench_large_file_literal(c: &mut Criterion) {
+    let config = make_config("benches/test_data/large_test_file.txt");
+    c.bench_function("recursive literal match", |b| {
         b.iter(|| run(config.clone()).unwrap())
     });
 }
 
-criterion_group!(benches, bench_single_literal);
+criterion_group!(benches, bench_large_file_literal);
 criterion_main!(benches);

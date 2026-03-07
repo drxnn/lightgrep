@@ -3,7 +3,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use lightgrep::{Config, Pattern, run};
 
 fn make_config(file_path: &str) -> Config {
-    let ac = AhoCorasick::new(&["said"]).unwrap();
+    let ac = AhoCorasick::new(&["gives"]).unwrap();
     Config {
         file_path: file_path.to_string(),
         pattern: Pattern::Literal {
@@ -16,7 +16,7 @@ fn make_config(file_path: &str) -> Config {
         line_number: false,
         recursive: false,
         file_extension: None,
-        highlight: false,
+        highlight: true,
     }
 }
 

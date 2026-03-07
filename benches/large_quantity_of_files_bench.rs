@@ -21,7 +21,7 @@ fn make_config(file_path: &str) -> Config {
 }
 
 fn bench_multiple_literal(c: &mut Criterion) {
-    let config = make_config("benches/test_data/thousand_files_recursive");
+    let config = make_config("benches/test_data/large_recursive_data_test");
     c.bench_function("recursive literal match", |b| {
         b.iter(|| run(config.clone()).unwrap())
     });
