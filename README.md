@@ -35,7 +35,7 @@ Build from source
 git clone git@github.com:drxnn/lightgrep.git
 cd lightgrep
 cargo build --release
-# binary will be in target/release/lightgrep
+
 ```
 
 ## Usage

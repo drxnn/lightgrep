@@ -71,10 +71,6 @@ pub fn print_results(results: Vec<FileResult>, config: Arc<Config>) -> io::Resul
     Ok(())
 }
 
-pub fn normalize_extension(ext: &str) -> &str {
-    ext.strip_prefix('.').unwrap_or(ext)
-}
-
 pub fn process_file(
     file: DirEntry,
     config: Arc<Config>,
@@ -154,7 +150,7 @@ pub fn print_each_result(
     Ok(())
 }
 
-fn get_chunks(bytes: &[u8], chunk_size: usize) -> Vec<(usize, usize)> {
+pub fn get_chunks(bytes: &[u8], chunk_size: usize) -> Vec<(usize, usize)> {
     let mut chunks = Vec::new();
     let mut start = 0;
 

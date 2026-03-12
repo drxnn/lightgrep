@@ -1,8 +1,7 @@
-#![allow(dead_code)]
 use clap::Parser;
 
 use regex::bytes::Regex;
-use std::collections::HashMap;
+
 use std::env;
 use std::error::Error;
 
@@ -12,7 +11,7 @@ use std::process;
 use aho_corasick::AhoCorasick;
 
 use crate::utils::build_ac;
-#[derive(Clone)] // for testing
+
 pub enum Pattern {
     Literal {
         pattern: AhoCorasick,
@@ -26,7 +25,6 @@ pub enum Pattern {
     },
 }
 
-#[derive(Clone)] // for test
 pub struct Config {
     pub file_path: String,
     pub pattern: Pattern,
