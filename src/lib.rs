@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use std::{borrow::Cow, env, error::Error, sync::Arc};
 
 use colored::Colorize;
-pub use types::{Args, Config, FileResult, Pattern, ThreadPool};
+pub use types::{Args, Config, FileResult, Pattern};
 pub use utils::{print_each_result, print_results, process_file};
 use walkdir::{DirEntry, WalkDir};
 
@@ -108,9 +108,6 @@ pub fn process_lines<'a>(
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let current = env::current_dir()?;
-
-    let num_of_cpus = num_cpus::get();
-    let pool_size = if num_of_cpus > 1 { num_of_cpus - 1 } else { 1 };
 
     let config = Arc::new(config);
 

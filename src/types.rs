@@ -1,18 +1,15 @@
 #![allow(dead_code)]
 use clap::Parser;
-use crossbeam::channel::{Receiver, Sender, unbounded};
+
 use regex::bytes::Regex;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
-use std::panic;
+
 use std::path::Path;
 use std::process;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use aho_corasick::AhoCorasick;
-use std::sync::Arc;
-use std::thread;
 
 use crate::utils::build_ac;
 #[derive(Clone)] // for testing
@@ -43,9 +40,7 @@ pub struct Config {
     pub file_extension: Option<String>,
     pub highlight: bool,
 }
-pub struct Output {
-    pub output_map: HashMap<String, Vec<(usize, String)>>,
-}
+
 #[derive(Parser)]
 pub struct Args {
     #[arg(short = 'q', long)]
@@ -144,84 +139,6 @@ impl TryFrom<Args> for Config {
             highlight: args.highlight,
             pool_size,
         })
-    }
-}
-pub struct ThreadPool {
-    workers: Vec<Worker>,
-    sender: Option<Sender<Job>>,
-}
-
-pub struct Worker {
-    id: usize,
-    thread: Option<thread::JoinHandle<()>>,
-}
-
-impl Worker {
-    pub fn new(id: usize, receiver: Receiver<Job>, counter: Arc<AtomicUsize>) -> Self {
-        let thread = thread::spawn(move || {
-            loop {
-                match receiver.recv() {
-                    Ok(job) => {
-                        job();
-
-                        counter.fetch_add(1, Ordering::Relaxed);
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
-
-        Worker {
-            id,
-            thread: Some(thread),
-        }
-    }
-}
-impl ThreadPool {
-    pub fn new(size: usize, counter: Arc<AtomicUsize>) -> Self {
-        let mut workers = Vec::with_capacity(size);
-
-        let (sender, receiver) = unbounded::<Job>();
-
-        for id in 0..size {
-            let counter_clone = Arc::clone(&counter);
-            let rec_clone = receiver.clone();
-            workers.push(Worker::new(id, rec_clone, counter_clone));
-        }
-
-        ThreadPool {
-            workers,
-            sender: Some(sender),
-        }
-    }
-}
-impl Drop for ThreadPool {
-    fn drop(&mut self) {
-        self.sender.take();
-        for worker in &mut self.workers {
-            if let Some(t) = worker.thread.take() {
-                if let Err(e) = t.join() {
-                    eprintln!("Worker {} panicked: {:?}", worker.id, e);
-                }
-            }
-        }
-    }
-}
-
-type Job = Box<dyn FnOnce() + Send + 'static>;
-
-impl ThreadPool {
-    pub fn execute<F>(&self, f: F)
-    where
-        F: FnOnce() + Send + 'static,
-    {
-        let job = Box::new(f);
-
-        if let Some(sender) = &self.sender {
-            sender.send(job).expect("Worker thread has shut down");
-        } else {
-            panic!("ThreadPool has been shut down");
-        }
     }
 }
 

@@ -100,7 +100,7 @@ pub fn process_file(
             let f = File::open(&file.path())?;
             let mmap = Arc::new(unsafe { Mmap::map(&f)? });
 
-            let chunks = get_chunks(&mmap, chunk_size as usize * 4);
+            let chunks = get_chunks(&mmap, chunk_size as usize * 2);
             let chunk_lines: Vec<usize> = if config.line_number {
                 let counts: Vec<usize> = chunks
                     .par_iter()
@@ -157,6 +157,7 @@ pub fn print_each_result(
 fn get_chunks(bytes: &[u8], chunk_size: usize) -> Vec<(usize, usize)> {
     let mut chunks = Vec::new();
     let mut start = 0;
+
     let bytes_len = bytes.len();
 
     if chunk_size == 0 {
