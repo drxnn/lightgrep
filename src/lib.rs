@@ -1,33 +1,32 @@
 mod types;
 mod utils;
 
-use std::{
-    borrow::Cow,
-    env,
-    error::Error,
-    sync::{Arc, atomic::AtomicUsize, mpsc},
-};
+use rayon::prelude::*;
+
+use std::{borrow::Cow, env, error::Error, sync::Arc};
 
 use colored::Colorize;
 pub use types::{Args, Config, FileResult, Pattern, ThreadPool};
 pub use utils::{print_each_result, print_results, process_file};
 use walkdir::{DirEntry, WalkDir};
 
-pub fn count_matches(matches: &[(usize, String)]) -> usize {
+use crate::utils::print_single_result;
+
+pub fn count_lines_with_matches(matches: &[(usize, String)]) -> usize {
     return matches.len();
 }
 
 pub trait Matcher {
-    fn matches_query(&self, text: &[u8]) -> bool;
+    fn matches_query(&self, slice: &[u8]) -> bool;
 }
 
 impl Matcher for Pattern {
-    fn matches_query(&self, text: &[u8]) -> bool {
+    fn matches_query(&self, slice: &[u8]) -> bool {
         match self {
-            Pattern::Regex(re) => re.is_match(text),
-            Pattern::Literal { pattern, .. } => pattern.is_match(text),
+            Pattern::Regex(re) => re.is_match(slice),
+            Pattern::Literal { pattern, .. } => pattern.is_match(slice),
 
-            Pattern::MultipleLiteral { pattern, .. } => pattern.is_match(text),
+            Pattern::MultipleLiteral { pattern, .. } => pattern.is_match(slice),
         }
     }
 }
@@ -56,8 +55,6 @@ pub fn highlight_match(line: &[u8], pat: &Pattern) -> String {
 
                 last = end;
             }
-
-            highlighted_string
         }
         Pattern::Regex(re) => {
             let matches: Vec<(usize, usize)> =
@@ -74,10 +71,12 @@ pub fn highlight_match(line: &[u8], pat: &Pattern) -> String {
                 );
                 last = end;
             }
-
-            highlighted_string
         }
     }
+    if last < line.len() {
+        highlighted_string.push_str(&String::from_utf8_lossy(&line[last..]));
+    }
+    highlighted_string
 }
 
 pub fn process_lines<'a>(
@@ -108,40 +107,26 @@ pub fn process_lines<'a>(
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    let file_counter = Arc::new(AtomicUsize::new(0));
     let current = env::current_dir()?;
 
     let num_of_cpus = num_cpus::get();
     let pool_size = if num_of_cpus > 1 { num_of_cpus - 1 } else { 1 };
 
-    let (tx, rx) = mpsc::channel::<FileResult>();
-
     let config = Arc::new(config);
-    let file_counter_clone = Arc::clone(&file_counter);
-    let thread_pool = Arc::new(ThreadPool::new(pool_size, file_counter_clone));
 
     if config.recursive {
-        let mut entry: DirEntry;
+        let entries: Vec<DirEntry> = WalkDir::new(&current)
+            .into_iter()
+            .filter_map(|e: Result<DirEntry, walkdir::Error>| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .collect();
 
-        for entry_walkdir in WalkDir::new(current) {
-            entry = entry_walkdir?;
+        let results: Vec<FileResult> = entries
+            .par_iter()
+            .filter_map(|e| process_file(e.clone(), Arc::clone(&config)).ok())
+            .collect();
 
-            if !entry.file_type().is_file() {
-                continue;
-            }
-
-            let config = Arc::clone(&config);
-            let tx = tx.clone();
-
-            let thread_pool_c = Arc::clone(&thread_pool);
-
-            let _ = process_file(entry, tx, config, thread_pool_c, pool_size);
-        }
-
-        drop(tx);
-        drop(thread_pool);
-
-        print_results(rx, config);
+        print_results(results, config)?;
     } else {
         let entry = match WalkDir::new(&config.file_path)
             .max_depth(1)
@@ -153,119 +138,114 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
             None => return Err("Entry was not found in current directory".into()),
         };
 
-        {
-            let tx = tx.clone();
-            let config = Arc::clone(&config);
+        let config = Arc::clone(&config);
 
-            let thread_pool_c = Arc::clone(&thread_pool);
-            let _ = process_file(entry, tx, config, thread_pool_c, pool_size);
-        } // dropping config
-        drop(tx);
-        drop(thread_pool);
-        print_results(rx, config);
+        let result = process_file(entry, Arc::clone(&config))?;
+
+        print_single_result(result, Arc::clone(&config))?;
     }
 
     Ok(())
 }
 
-// #[cfg(test)]
-// mod tests {
+#[cfg(test)]
+mod tests {
 
-//     use super::*;
-//     use aho_corasick::AhoCorasick;
+    use super::*;
+    use aho_corasick::AhoCorasick;
 
-//     #[test]
-//     fn literal_match() {
-//         use crate::{Matcher, Pattern};
-//         use aho_corasick::AhoCorasick;
+    #[test]
+    fn literal_match() {
+        use crate::{Matcher, Pattern};
+        use aho_corasick::AhoCorasick;
 
-//         let ac = AhoCorasick::new(&["foo"]).unwrap();
-//         let pattern = Pattern::Literal {
-//             pattern: ac,
-//             case_insensitive: false,
-//         };
-//         assert!(pattern.matches_query("foo".as_bytes()));
-//         assert!(!pattern.matches_query("Foo".as_bytes()));
-//     }
+        let ac = AhoCorasick::new(&["foo"]).unwrap();
+        let pattern = Pattern::Literal {
+            pattern: ac,
+            case_insensitive: false,
+        };
+        assert!(pattern.matches_query("foo".as_bytes()));
+        assert!(!pattern.matches_query("Foo".as_bytes()));
+    }
 
-//     #[test]
-//     fn multiple_literal_match() {
-//         use crate::{Matcher, Pattern};
-//         let ac = AhoCorasick::new(&["foo", "bar"]).unwrap();
-//         let pattern = Pattern::MultipleLiteral {
-//             pattern: ac,
-//             case_insensitive: false,
-//         };
-//         assert!(pattern.matches_query("foo".as_bytes()));
-//         assert!(pattern.matches_query("bar".as_bytes()));
-//         assert!(!pattern.matches_query("baz".as_bytes()));
-//     }
-//     #[test]
-//     fn highlight_literal() {
-//         use crate::{Pattern, highlight_match};
-//         use aho_corasick::AhoCorasick;
-//         use colored::Colorize;
+    #[test]
+    fn multiple_literal_match() {
+        use crate::{Matcher, Pattern};
+        let ac = AhoCorasick::new(&["foo", "bar"]).unwrap();
+        let pattern = Pattern::MultipleLiteral {
+            pattern: ac,
+            case_insensitive: false,
+        };
+        assert!(pattern.matches_query("foo".as_bytes()));
+        assert!(pattern.matches_query("bar".as_bytes()));
+        assert!(!pattern.matches_query("baz".as_bytes()));
+    }
+    #[test]
+    fn highlight_literal() {
+        use crate::{Pattern, highlight_match};
+        use aho_corasick::AhoCorasick;
+        use colored::Colorize;
 
-//         let ac = AhoCorasick::new(&["foo"]).unwrap();
-//         let pattern = Pattern::Literal {
-//             pattern: ac,
-//             case_insensitive: false,
-//         };
-//         let result = highlight_match("foo bar", &pattern);
-//         let expected = "foo".red().underline().bold().to_string() + " bar";
-//         assert_eq!(result, expected);
-//     }
+        let ac = AhoCorasick::new(&["foo"]).unwrap();
+        let pattern = Pattern::Literal {
+            pattern: ac,
+            case_insensitive: false,
+        };
+        let result = highlight_match("foo bar".as_bytes(), &pattern);
+        let expected = "foo".red().underline().bold().to_string() + " bar";
+        assert_eq!(result, expected);
+    }
 
-//     #[test]
-//     fn process_lines_basic() {
-//         use crate::{Pattern, process_lines};
-//         use aho_corasick::AhoCorasick;
-//         use std::borrow::Cow;
+    #[test]
+    fn process_lines_basic() {
+        use crate::{Pattern, process_lines};
+        use aho_corasick::AhoCorasick;
+        use std::borrow::Cow;
 
-//         let ac = AhoCorasick::new(&["foo"]).unwrap();
-//         let pattern = Pattern::Literal {
-//             pattern: ac,
-//             case_insensitive: false,
-//         };
-//         let text = "foo\nbar\nfoo bar";
-//         let result: Vec<(usize, Cow<str>)> = process_lines(&pattern, text, false, false);
+        let ac = AhoCorasick::new(&["foo"]).unwrap();
+        let pattern = Pattern::Literal {
+            pattern: ac,
+            case_insensitive: false,
+        };
+        let text = "foo\nbar\nfoo bar";
+        let result: Vec<(usize, Cow<str>)> = process_lines(&pattern, text.as_bytes(), false, false);
 
-//         assert_eq!(result.len(), 2);
-//         assert_eq!(result[0].0, 1);
-//         assert_eq!(result[1].0, 3);
-//     }
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, 1);
+        assert_eq!(result[1].0, 3);
+    }
 
-//     #[test]
-//     fn invert_lines() {
-//         use crate::{Pattern, process_lines};
-//         use aho_corasick::AhoCorasick;
+    #[test]
+    fn invert_lines() {
+        use crate::{Pattern, process_lines};
+        use aho_corasick::AhoCorasick;
 
-//         let ac = AhoCorasick::new(&["foo"]).unwrap();
-//         let pattern = Pattern::Literal {
-//             pattern: ac,
-//             case_insensitive: false,
-//         };
-//         let text = "foo\nbar\nbaz";
-//         let result = process_lines(&pattern, text, true, false);
+        let ac = AhoCorasick::new(&["foo"]).unwrap();
+        let pattern = Pattern::Literal {
+            pattern: ac,
+            case_insensitive: false,
+        };
+        let text = "foo\nbar\nbaz";
+        let result = process_lines(&pattern, text.as_bytes(), true, false);
 
-//         assert_eq!(result.len(), 2);
-//         assert_eq!(result[0].1, "bar");
-//         assert_eq!(result[1].1, "baz");
-//     }
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].1, "bar");
+        assert_eq!(result[1].1, "baz");
+    }
 
-//     #[test]
-//     fn ignore_case_literal() {
-//         use crate::{Matcher, Pattern};
-//         use aho_corasick::AhoCorasickBuilder;
+    #[test]
+    fn ignore_case_literal() {
+        use crate::{Matcher, Pattern};
+        use aho_corasick::AhoCorasickBuilder;
 
-//         let ac = AhoCorasickBuilder::new()
-//             .ascii_case_insensitive(true)
-//             .build(&["foo"])
-//             .unwrap();
-//         let pattern = Pattern::Literal {
-//             pattern: ac,
-//             case_insensitive: true,
-//         };
-//         assert!(pattern.matches_query("FOO".as_bytes()));
-//     }
-// }
+        let ac = AhoCorasickBuilder::new()
+            .ascii_case_insensitive(true)
+            .build(&["foo"])
+            .unwrap();
+        let pattern = Pattern::Literal {
+            pattern: ac,
+            case_insensitive: true,
+        };
+        assert!(pattern.matches_query("FOO".as_bytes()));
+    }
+}

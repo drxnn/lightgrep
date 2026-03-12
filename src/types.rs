@@ -10,9 +10,11 @@ use std::path::Path;
 use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
+use aho_corasick::AhoCorasick;
 use std::sync::Arc;
 use std::thread;
+
+use crate::utils::build_ac;
 #[derive(Clone)] // for testing
 pub enum Pattern {
     Literal {
@@ -36,6 +38,7 @@ pub struct Config {
     pub count: bool,
     pub line_number: bool,
     pub recursive: bool,
+    pub pool_size: usize,
 
     pub file_extension: Option<String>,
     pub highlight: bool,
@@ -89,16 +92,6 @@ impl TryFrom<Args> for Config {
         });
 
         // helper function put in utils later
-        fn build_ac(patterns: &[String], ignore_case: bool) -> Result<AhoCorasick, Box<dyn Error>> {
-            let pattern_refs: Vec<&str> = patterns.iter().map(|s| s.as_str()).collect();
-            if ignore_case {
-                Ok(AhoCorasickBuilder::new()
-                    .ascii_case_insensitive(true)
-                    .build(&pattern_refs)?)
-            } else {
-                Ok(AhoCorasick::new(&pattern_refs)?)
-            }
-        }
 
         let pattern = if args.regex {
             let q = if let Some(qs) = args.query.clone() {
@@ -136,6 +129,9 @@ impl TryFrom<Args> for Config {
             return Err("--regex requires a query string (use --query or --multiple)".into());
         };
 
+        let num_of_cpus = num_cpus::get();
+        let pool_size = if num_of_cpus > 1 { num_of_cpus - 1 } else { 1 };
+
         Ok(Config {
             pattern,
             file_path,
@@ -146,6 +142,7 @@ impl TryFrom<Args> for Config {
             recursive: args.recursive,
             file_extension,
             highlight: args.highlight,
+            pool_size,
         })
     }
 }

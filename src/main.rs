@@ -5,7 +5,7 @@ extern crate num_cpus;
 mod types;
 mod utils;
 
-use lightgrep::{Args, Config, FileResult, ThreadPool, count_matches, process_lines, run};
+use lightgrep::{Args, Config, FileResult, count_lines_with_matches, process_lines, run};
 
 use std::error::Error;
 

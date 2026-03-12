@@ -17,6 +17,7 @@ fn make_config(file_path: &str) -> Config {
         recursive: false,
         file_extension: None,
         highlight: true,
+        pool_size: 11,
     }
 }
 

@@ -1,15 +1,12 @@
-use aho_corasick::AhoCorasick;
 use criterion::{Criterion, criterion_group, criterion_main};
 use lightgrep::{Config, Pattern, run};
+use regex::bytes::Regex;
 
 fn make_config(file_path: &str) -> Config {
-    let ac = AhoCorasick::new(&["said"]).unwrap();
+    let regex = Regex::new(r"\b(?:\w+\s+){5}\w+\b").unwrap();
     Config {
         file_path: file_path.to_string(),
-        pattern: Pattern::Literal {
-            pattern: ac,
-            case_insensitive: false,
-        },
+        pattern: Pattern::Regex(regex),
         ignore_case: false,
         invert: false,
         count: true,
@@ -17,11 +14,12 @@ fn make_config(file_path: &str) -> Config {
         recursive: true,
         file_extension: None,
         highlight: false,
+        pool_size: 11,
     }
 }
 
 fn bench_multiple_literal(c: &mut Criterion) {
-    let config = make_config("benches/test_data/large_recursive_data_test");
+    let config = make_config("benches/test_data/large_recursive_data");
     c.bench_function("recursive literal match", |b| {
         b.iter(|| run(config.clone()).unwrap())
     });

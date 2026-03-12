@@ -1,33 +1,63 @@
-#![allow(dead_code)]
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use colored::Colorize;
 use memmap2::Mmap;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 extern crate num_cpus;
 
+use crate::count_lines_with_matches;
 use crate::{Config, FileResult, process_lines};
-use crate::{ThreadPool, count_matches};
-// use memmap2::Mmap;
+
+use std::error::Error;
 use std::fs::{self, File};
 
+use std::io::{self, BufWriter, StdoutLock, Write};
 use std::sync::Arc;
-
-use std::sync::mpsc;
-const LARGE_FILE_THRESHOLD: u64 = 1073741824;
 
 use walkdir::DirEntry;
 
-pub fn print_results(rx: mpsc::Receiver<FileResult>, config: Arc<Config>) {
+pub fn build_ac(patterns: &[String], ignore_case: bool) -> Result<AhoCorasick, Box<dyn Error>> {
+    let pattern_refs: Vec<&str> = patterns.iter().map(|s| s.as_str()).collect();
+    if ignore_case {
+        Ok(AhoCorasickBuilder::new()
+            .ascii_case_insensitive(true)
+            .build(&pattern_refs)?)
+    } else {
+        Ok(AhoCorasick::new(&pattern_refs)?)
+    }
+}
+
+pub fn print_single_result(result: FileResult, config: Arc<Config>) -> io::Result<()> {
+    let mut stdout = BufWriter::new(io::stdout().lock());
+    match result {
+        FileResult::Match(n, v) => {
+            let config = Arc::clone(&config);
+            if config.count {
+                // total += count_lines_with_matches(&v);
+            } else {
+                for (key, value) in &v {
+                    print_each_result(&mut stdout, &config, &n, (*key, value))?;
+                }
+            }
+        }
+        FileResult::Error(e) => eprintln!("Error: {}", e),
+        FileResult::Skip => {}
+    }
+    Ok(())
+}
+pub fn print_results(results: Vec<FileResult>, config: Arc<Config>) -> io::Result<()> {
     let mut total = 0;
-    for file_response in rx {
+    let mut stdout = BufWriter::new(io::stdout().lock());
+
+    for file_response in results {
         match file_response {
             FileResult::Match(n, v) => {
                 let config = Arc::clone(&config);
                 if config.count {
-                    total += count_matches(&v);
+                    total += count_lines_with_matches(&v);
                 } else {
                     for (key, value) in &v {
-                        let config = Arc::clone(&config);
-                        print_each_result(config, &n, (*key, value));
+                        print_each_result(&mut stdout, &config, &n, (*key, value))?;
                     }
                 }
             }
@@ -36,8 +66,9 @@ pub fn print_results(rx: mpsc::Receiver<FileResult>, config: Arc<Config>) {
         }
     }
     if config.count {
-        println!("Number of matched lines found: {total}");
+        println!("Number of lines with matches: {total}");
     }
+    Ok(())
 }
 
 pub fn normalize_extension(ext: &str) -> &str {
@@ -46,88 +77,81 @@ pub fn normalize_extension(ext: &str) -> &str {
 
 pub fn process_file(
     file: DirEntry,
-    tx: mpsc::Sender<FileResult>,
     config: Arc<Config>,
-    thread_pool: Arc<ThreadPool>,
-    pool_size: usize,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let metadata = fs::metadata(file.path())?;
+) -> Result<FileResult, Box<dyn std::error::Error>> {
+    let metadata = file.metadata()?;
     let file_size_bytes = metadata.len();
-    let chunk_size = (file_size_bytes + pool_size as u64) / (pool_size * 8) as u64;
+    let chunk_size = (file_size_bytes + config.pool_size as u64) / (config.pool_size * 2) as u64;
 
-    let f = File::open(&file.path())?;
-    let mmap = Arc::new(unsafe { Mmap::map(&f)? });
+    match file_size_bytes {
+        0..=1_999_999 => {
+            let f_bytes = fs::read(file.path())?;
+            let temp: Vec<(usize, std::borrow::Cow<'_, str>)> =
+                process_lines(&config.pattern, &f_bytes, config.invert, config.highlight);
+            let owned_temp: Vec<(usize, String)> = temp
+                .into_iter()
+                .map(|(idx, s)| (idx, s.into_owned()))
+                .collect();
+            let file_path = file.path().to_string_lossy().to_string();
+            return Ok(FileResult::Match(file_path, owned_temp));
+        }
 
-    if metadata.len() >= 32_000_000 {
-        let mmap = Arc::clone(&mmap);
-        let chunks = get_chunks(&mmap, chunk_size as usize);
+        _ => {
+            let f = File::open(&file.path())?;
+            let mmap = Arc::new(unsafe { Mmap::map(&f)? });
 
-        let mut line_offset = 0;
-        for (start, end) in chunks {
-            let config = Arc::clone(&config);
-            let tx = tx.clone();
-            let mmap = Arc::clone(&mmap);
-
-            let chunk_lines = mmap[start..end].iter().filter(|&&b| b == b'\n').count();
+            let chunks = get_chunks(&mmap, chunk_size as usize * 4);
+            let chunk_lines: Vec<usize> = if config.line_number {
+                let counts: Vec<usize> = chunks
+                    .par_iter()
+                    .map(|&(start, end)| mmap[start..end].iter().filter(|&&b| b == b'\n').count())
+                    .collect();
+                counts
+                    .iter()
+                    .scan(0usize, |acc, &c| {
+                        let curr = *acc;
+                        *acc += c;
+                        Some(curr)
+                    })
+                    .collect()
+            } else {
+                vec![0usize; chunks.len()]
+            };
 
             let file_path = file.path().to_string_lossy().to_string();
-
-            thread_pool.execute(move || {
-                let temp: Vec<(usize, std::borrow::Cow<'_, str>)> = process_lines(
-                    &config.pattern,
-                    &mmap[start..end],
-                    config.invert,
-                    config.highlight,
-                )
-                .into_iter()
-                .map(|(idx, s)| (idx + line_offset, s))
+            let matched: Vec<(usize, String)> = chunks
+                .par_iter()
+                .zip(chunk_lines.par_iter())
+                .flat_map(|((start, end), chunk_line)| {
+                    process_lines(
+                        &config.pattern,
+                        &mmap[*start..*end],
+                        config.invert,
+                        config.highlight,
+                    )
+                    .into_iter()
+                    .map(move |(idx, s)| (idx + chunk_line, s.into_owned()))
+                    .collect::<Vec<_>>()
+                })
                 .collect();
 
-                if !temp.is_empty() {
-                    let owned_temp: Vec<(usize, String)> = temp
-                        .into_iter()
-                        .map(|(idx, s)| (idx, s.to_string()))
-                        .collect();
-
-                    if let Err(e) = tx.send(FileResult::Match(file_path, owned_temp)) {
-                        eprintln!("failed to send chunk result: {:?}", e);
-                    }
-                }
-            });
-            line_offset += chunk_lines;
+            return Ok(FileResult::Match(file_path, matched));
         }
-    } else {
-        let config = Arc::clone(&config);
-        let tx = tx.clone();
-        let mmap = Arc::clone(&mmap);
-        let file_path = file.path().to_string_lossy().to_string();
-
-        thread_pool.execute(move || {
-            let temp: Vec<(usize, std::borrow::Cow<'_, str>)> =
-                process_lines(&config.pattern, &mmap, config.invert, config.highlight);
-
-            if !temp.is_empty() {
-                let owned_temp: Vec<(usize, String)> = temp
-                    .into_iter()
-                    .map(|(idx, s)| (idx, s.to_string()))
-                    .collect();
-
-                if let Err(e) = tx.send(FileResult::Match(file_path, owned_temp)) {
-                    eprintln!("failed to send chunk result: {:?}", e);
-                }
-            }
-        });
     }
-
-    Ok(())
 }
 
-pub fn print_each_result(config: Arc<Config>, name: &str, v: (usize, &String)) {
+pub fn print_each_result(
+    out: &mut BufWriter<StdoutLock>,
+    config: &Arc<Config>,
+    name: &str,
+    v: (usize, &String),
+) -> io::Result<()> {
     if config.line_number {
-        println!("{} - line: {}, {}", name.green(), v.0, v.1);
+        writeln!(out, "{} - line: {}, {}", name.green(), v.0, v.1)?;
     } else {
-        println!("{}: {}", name.green(), v.1);
+        writeln!(out, "{}: {}", name.green(), v.1)?;
     }
+    Ok(())
 }
 
 fn get_chunks(bytes: &[u8], chunk_size: usize) -> Vec<(usize, usize)> {
