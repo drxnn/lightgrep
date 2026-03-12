@@ -1,6 +1,6 @@
 [package]
 name = "lightgrep"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "A fast, ergonomic grep-like tool in Rust"
 license = "MIT OR Apache-2.0"  
@@ -21,29 +21,3 @@ aho-corasick = "1.1.3"
 walkdir = "2.5.0"
 memmap2 = "0.9.10"
 rayon = "1.11.0"
-
-[dev-dependencies]
-criterion = { version = "0.8", features = ["html_reports"] }
-
-[[bench]]
-name = "single_file_regex_match_bench"
-harness = false
-
-[[bench]]
-name = "file_directory_regex_bench"
-harness = false
-
-[[bench]]
-name = "highlight_file_directory_regex_bench"
-harness = false
-
-[[bench]]
-name = "single_file_literal_bench"
-harness = false
-
-[[bench]]
-name = "large_quantity_of_files_bench"
-harness = false
-[[bench]]
-name = "large_file_literal_bench"
-harness = false

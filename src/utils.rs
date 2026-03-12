@@ -29,19 +29,22 @@ pub fn build_ac(patterns: &[String], ignore_case: bool) -> Result<AhoCorasick, B
 
 pub fn print_single_result(result: FileResult, config: Arc<Config>) -> io::Result<()> {
     let mut stdout = BufWriter::new(io::stdout().lock());
+    let mut total = 0;
     match result {
         FileResult::Match(n, v) => {
             let config = Arc::clone(&config);
             if config.count {
-                // total += count_lines_with_matches(&v);
-            } else {
-                for (key, value) in &v {
-                    print_each_result(&mut stdout, &config, &n, (*key, value))?;
-                }
+                total += count_lines_with_matches(&v);
+            }
+            for (key, value) in &v {
+                print_each_result(&mut stdout, &config, &n, (*key, value))?;
             }
         }
         FileResult::Error(e) => eprintln!("Error: {}", e),
         FileResult::Skip => {}
+    }
+    if config.count {
+        println!("Number of lines with matches: {total}");
     }
     Ok(())
 }
@@ -55,10 +58,9 @@ pub fn print_results(results: Vec<FileResult>, config: Arc<Config>) -> io::Resul
                 let config = Arc::clone(&config);
                 if config.count {
                     total += count_lines_with_matches(&v);
-                } else {
-                    for (key, value) in &v {
-                        print_each_result(&mut stdout, &config, &n, (*key, value))?;
-                    }
+                }
+                for (key, value) in &v {
+                    print_each_result(&mut stdout, &config, &n, (*key, value))?;
                 }
             }
             FileResult::Error(e) => eprintln!("Error: {}", e),
