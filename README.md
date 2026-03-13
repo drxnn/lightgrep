@@ -1,6 +1,7 @@
 # lightgrep
 
-lightgrep is a fast, ergonomic grep-like CLI tool written in Rust. It searches files using regex or string literals, with optional highlighting, line numbers, and recursive searching. It is optimized for performance and can take advantage of multiple CPU cores when processing large files.
+lightgrep is a fast, ergonomic grep-like CLI tool written in Rust. It searches files using regex or string literals, with optional highlighting,
+line numbers, and recursive searching. It is optimized for performance and can take advantage of multiple CPU cores when processing large files.
 
 ---
 

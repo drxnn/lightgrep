@@ -25,6 +25,21 @@ pub enum Pattern {
     },
 }
 
+pub trait Matcher {
+    fn matches_query(&self, slice: &[u8]) -> bool;
+}
+
+impl Matcher for Pattern {
+    fn matches_query(&self, slice: &[u8]) -> bool {
+        match self {
+            Pattern::Regex(re) => re.is_match(slice),
+            Pattern::Literal { pattern, .. } => pattern.is_match(slice),
+
+            Pattern::MultipleLiteral { pattern, .. } => pattern.is_match(slice),
+        }
+    }
+}
+
 pub struct Config {
     pub file_path: String,
     pub pattern: Pattern,

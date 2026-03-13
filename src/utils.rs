@@ -1,13 +1,15 @@
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use colored::Colorize;
+
 use memmap2::Mmap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 extern crate num_cpus;
 
-use crate::count_lines_with_matches;
-use crate::{Config, FileResult, process_lines};
+use crate::types::Matcher;
+use crate::{Config, FileResult, Pattern};
 
+use std::borrow::Cow;
 use std::error::Error;
 use std::fs::{self, File};
 
@@ -15,6 +17,10 @@ use std::io::{self, BufWriter, StdoutLock, Write};
 use std::sync::Arc;
 
 use walkdir::DirEntry;
+
+pub fn count_lines_with_matches(matches: &[(usize, String)]) -> usize {
+    return matches.len();
+}
 
 pub fn build_ac(patterns: &[String], ignore_case: bool) -> Result<AhoCorasick, Box<dyn Error>> {
     let pattern_refs: Vec<&str> = patterns.iter().map(|s| s.as_str()).collect();
@@ -27,25 +33,98 @@ pub fn build_ac(patterns: &[String], ignore_case: bool) -> Result<AhoCorasick, B
     }
 }
 
+pub fn highlight_match(line: &[u8], pat: &Pattern) -> String {
+    let mut highlighted_string = String::from("");
+    let mut last = 0;
+
+    match pat {
+        Pattern::Literal { pattern, .. } | Pattern::MultipleLiteral { pattern, .. } => {
+            let matches: Vec<(usize, usize)> = pattern
+                .find_iter(line)
+                .map(|m| (m.start(), m.end()))
+                .collect();
+
+            for (start, end) in matches {
+                highlighted_string.push_str(&String::from_utf8_lossy(&line[last..start]));
+
+                highlighted_string.push_str(
+                    &String::from_utf8_lossy(&line[start..end])
+                        .red()
+                        .underline()
+                        .bold()
+                        .to_string(),
+                );
+
+                last = end;
+            }
+        }
+        Pattern::Regex(re) => {
+            let matches: Vec<(usize, usize)> =
+                re.find_iter(line).map(|x| (x.start(), x.end())).collect();
+
+            for (start, end) in matches {
+                highlighted_string.push_str(&String::from_utf8_lossy(&line[last..start]));
+                highlighted_string.push_str(
+                    &String::from_utf8_lossy(&line[start..end])
+                        .red()
+                        .underline()
+                        .bold()
+                        .to_string(),
+                );
+                last = end;
+            }
+        }
+    }
+    if last < line.len() {
+        highlighted_string.push_str(&String::from_utf8_lossy(&line[last..]));
+    }
+    highlighted_string
+}
+
+pub fn process_lines<'a>(
+    query: &Pattern,
+    contents: &'a [u8],
+    invert: bool,
+    highlight: bool,
+) -> Vec<(usize, Cow<'a, str>)> {
+    contents
+        .split(|&b| b == b'\n')
+        .enumerate()
+        .filter_map(|(i, line)| {
+            let matched = query.matches_query(line);
+            if matched ^ invert {
+                if highlight {
+                    Some((i + 1, Cow::Owned(highlight_match(line, query))))
+                } else {
+                    Some((
+                        i + 1,
+                        Cow::Owned(String::from_utf8_lossy(line).into_owned()),
+                    ))
+                }
+            } else {
+                None
+            }
+        })
+        .collect()
+}
 pub fn print_single_result(result: FileResult, config: Arc<Config>) -> io::Result<()> {
     let mut stdout = BufWriter::new(io::stdout().lock());
     let mut total = 0;
     match result {
         FileResult::Match(n, v) => {
-            let config = Arc::clone(&config);
             if config.count {
                 total += count_lines_with_matches(&v);
-            }
-            for (key, value) in &v {
-                print_each_result(&mut stdout, &config, &n, (*key, value))?;
+                writeln!(stdout, "{}:{}", n, total)?;
+            } else {
+                for (key, value) in &v {
+                    print_each_result(&mut stdout, &config, &n, (*key, value))?;
+                }
             }
         }
         FileResult::Error(e) => eprintln!("Error: {}", e),
         FileResult::Skip => {}
     }
-    if config.count {
-        println!("Number of lines with matches: {total}");
-    }
+    stdout.flush()?;
     Ok(())
 }
 pub fn print_results(results: Vec<FileResult>, config: Arc<Config>) -> io::Result<()> {
@@ -55,12 +134,14 @@ pub fn print_results(results: Vec<FileResult>, config: Arc<Config>) -> io::Resul
     for file_response in results {
         match file_response {
             FileResult::Match(n, v) => {
-                let config = Arc::clone(&config);
                 if config.count {
-                    total += count_lines_with_matches(&v);
-                }
-                for (key, value) in &v {
-                    print_each_result(&mut stdout, &config, &n, (*key, value))?;
+                    let file_count = count_lines_with_matches(&v);
+                    total += file_count;
+                    writeln!(stdout, "{}:{}", n, file_count)?;
+                } else {
+                    for (key, value) in &v {
+                        print_each_result(&mut stdout, &config, &n, (*key, value))?;
+                    }
                 }
             }
             FileResult::Error(e) => eprintln!("Error: {}", e),
@@ -68,7 +149,7 @@ pub fn print_results(results: Vec<FileResult>, config: Arc<Config>) -> io::Resul
         }
     }
     if config.count {
-        println!("Number of lines with matches: {total}");
+        writeln!(stdout, "total matches:{}", total)?;
     }
     Ok(())
 }

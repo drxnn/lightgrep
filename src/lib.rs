@@ -3,108 +3,11 @@ mod utils;
 
 use rayon::prelude::*;
 
-use std::{borrow::Cow, env, error::Error, sync::Arc};
+use std::{env, error::Error, sync::Arc};
 
-use colored::Colorize;
 pub use types::{Args, Config, FileResult, Pattern};
-pub use utils::{print_each_result, print_results, process_file};
+pub use utils::{print_each_result, print_results, print_single_result, process_file};
 use walkdir::{DirEntry, WalkDir};
-
-use crate::utils::print_single_result;
-
-pub fn count_lines_with_matches(matches: &[(usize, String)]) -> usize {
-    return matches.len();
-}
-
-pub trait Matcher {
-    fn matches_query(&self, slice: &[u8]) -> bool;
-}
-
-impl Matcher for Pattern {
-    fn matches_query(&self, slice: &[u8]) -> bool {
-        match self {
-            Pattern::Regex(re) => re.is_match(slice),
-            Pattern::Literal { pattern, .. } => pattern.is_match(slice),
-
-            Pattern::MultipleLiteral { pattern, .. } => pattern.is_match(slice),
-        }
-    }
-}
-
-pub fn highlight_match(line: &[u8], pat: &Pattern) -> String {
-    let mut highlighted_string = String::from("");
-    let mut last = 0;
-
-    match pat {
-        Pattern::Literal { pattern, .. } | Pattern::MultipleLiteral { pattern, .. } => {
-            let matches: Vec<(usize, usize)> = pattern
-                .find_iter(line)
-                .map(|m| (m.start(), m.end()))
-                .collect();
-
-            for (start, end) in matches {
-                highlighted_string.push_str(&String::from_utf8_lossy(&line[last..start]));
-
-                highlighted_string.push_str(
-                    &String::from_utf8_lossy(&line[start..end])
-                        .red()
-                        .underline()
-                        .bold()
-                        .to_string(),
-                );
-
-                last = end;
-            }
-        }
-        Pattern::Regex(re) => {
-            let matches: Vec<(usize, usize)> =
-                re.find_iter(line).map(|x| (x.start(), x.end())).collect();
-
-            for (start, end) in matches {
-                highlighted_string.push_str(&String::from_utf8_lossy(&line[last..start]));
-                highlighted_string.push_str(
-                    &String::from_utf8_lossy(&line[start..end])
-                        .red()
-                        .underline()
-                        .bold()
-                        .to_string(),
-                );
-                last = end;
-            }
-        }
-    }
-    if last < line.len() {
-        highlighted_string.push_str(&String::from_utf8_lossy(&line[last..]));
-    }
-    highlighted_string
-}
-
-pub fn process_lines<'a>(
-    query: &Pattern,
-    contents: &'a [u8],
-    invert: bool,
-    highlight: bool,
-) -> Vec<(usize, Cow<'a, str>)> {
-    contents
-        .split(|&b| b == b'\n')
-        .enumerate()
-        .filter_map(|(i, line)| {
-            let matched = query.matches_query(line);
-            if matched ^ invert {
-                if highlight {
-                    Some((i + 1, Cow::Owned(highlight_match(line, query))))
-                } else {
-                    Some((
-                        i + 1,
-                        Cow::Owned(String::from_utf8_lossy(line).into_owned()),
-                    ))
-                }
-            } else {
-                None
-            }
-        })
-        .collect()
-}
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let current = env::current_dir()?;
@@ -148,12 +51,13 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
 
-    use super::*;
+    use crate::utils::{highlight_match, process_lines};
+
     use aho_corasick::AhoCorasick;
 
     #[test]
     fn literal_match() {
-        use crate::{Matcher, Pattern};
+        use crate::types::{Matcher, Pattern};
         use aho_corasick::AhoCorasick;
 
         let ac = AhoCorasick::new(&["foo"]).unwrap();
@@ -167,7 +71,7 @@ mod tests {
 
     #[test]
     fn multiple_literal_match() {
-        use crate::{Matcher, Pattern};
+        use crate::types::{Matcher, Pattern};
         let ac = AhoCorasick::new(&["foo", "bar"]).unwrap();
         let pattern = Pattern::MultipleLiteral {
             pattern: ac,
@@ -179,7 +83,7 @@ mod tests {
     }
     #[test]
     fn highlight_literal() {
-        use crate::{Pattern, highlight_match};
+        use crate::types::Pattern;
         use aho_corasick::AhoCorasick;
         use colored::Colorize;
 
@@ -195,7 +99,7 @@ mod tests {
 
     #[test]
     fn process_lines_basic() {
-        use crate::{Pattern, process_lines};
+        use crate::Pattern;
         use aho_corasick::AhoCorasick;
         use std::borrow::Cow;
 
@@ -214,7 +118,7 @@ mod tests {
 
     #[test]
     fn invert_lines() {
-        use crate::{Pattern, process_lines};
+        use crate::Pattern;
         use aho_corasick::AhoCorasick;
 
         let ac = AhoCorasick::new(&["foo"]).unwrap();
@@ -232,7 +136,7 @@ mod tests {
 
     #[test]
     fn ignore_case_literal() {
-        use crate::{Matcher, Pattern};
+        use crate::types::{Matcher, Pattern};
         use aho_corasick::AhoCorasickBuilder;
 
         let ac = AhoCorasickBuilder::new()
